@@ -1,25 +1,36 @@
 # Workflows
 
 The worker takes a ComfyUI workflow exported in **API format**. The UI-format JSON that ships in
-ComfyUI's template library will not run here: it uses `nodes` and `links`, the API needs
-`class_type` entries.
+ComfyUI's template library (`nodes` and `links`) will not run here: the API needs `class_type`
+entries.
 
-## Why they are not in this repo yet
+## What is in here
 
-ComfyUI's own template library (`Comfy-Org/workflow_templates`) publishes UI format only, checked
-2026-11-02. Converting UI to API format is done by ComfyUI itself, from the UI, with
-`Workflow > Export (API)`. That means the three JSONs are exported once, by a person at a ComfyUI
-UI, and committed here. They are not hand-written, because a hand-written graph that has never run
-is worse than no graph.
-
-## The three exports this project needs
-
-| File | Model family | Notes |
+| File | Model family | Exported nodes |
 |---|---|---|
-| `flux2-dev.json` | FLUX.2 dev | text-to-image, 30 steps baseline from the image-lab measurements |
-| `z-image-turbo.json` | Z-Image-Turbo | 8 steps, CFG 1 |
-| `qwen-image.json` | Qwen-Image 2.1 | 8 steps, CFG 1 with turbo weights |
-| `lora-pass.json` | any of the above plus `LoraLoader` | weight and trigger words per brand |
+| `flux2-dev.json` | FLUX.2 dev with the FLUX.2 Turbo LoRA | 19 |
+| `qwen-image.json` | Qwen-Image 2.1 turbo, with the prompt-enhancer path | 19 |
+| `z-image-turbo.json` | Z-Image-Turbo | 10 |
+
+Model filenames each graph references are listed in `../docs/fleet-models.md`.
+
+## How they were produced, so they can be produced again
+
+No GPU is needed to author or export a workflow, only to run one. The graphs come from ComfyUI
+running CPU-only on a plain container:
+
+1. `git clone --branch v0.43.2 https://github.com/comfyanonymous/ComfyUI`, CPU-only PyTorch.
+2. `python main.py --cpu --listen 127.0.0.1 --port 8188`.
+3. Load the upstream template, then call the conversion the **Workflow > Export (API)** menu calls:
+   `await app.graphToPrompt()` in the page, which returns the API-format prompt for the loaded graph.
+
+Templates are the subgraph-style files from `Comfy-Org/workflow_templates`; the frontend flattens
+subgraphs during that conversion, which is why three graph nodes become nineteen API nodes for
+FLUX.2.
+
+The export is checked, not assumed: each file is loaded against the pinned ComfyUI build and every
+node type is resolved against that build's node definitions. A graph with an unknown node type fails
+the export rather than shipping a workflow that cannot run.
 
 ## How a workflow reaches the endpoint
 
@@ -30,12 +41,12 @@ POST /runsync
 {"input": {"workflow": {...}, "images": [...]}}
 ```
 
-So the caller keeps the JSON on our side and sends it per job. That means a workflow change does not
-need an image rebuild, and the design team can iterate without touching this repo at all. The files
-here are the baseline copies, not the delivery mechanism.
+So the caller keeps the JSON on our side and sends it per job. A workflow change does not need an
+image rebuild, and the design team can iterate without touching this repo at all. The files here are
+the baseline copies, not the delivery mechanism.
 
 ## Cost
 
 Every job costs a worker start, the run, and `idle_timeout` seconds of warm idle. The caller writes
-one ledger line per job with the wall time and the computed cost; see the fleet's `designer-gpu`
-skill. Nothing in this repo estimates cost, because an estimate that is not measured drifts.
+one ledger line per job with the wall time and the computed cost. Nothing in this repo estimates
+cost, because an estimate that is not measured drifts.
